@@ -1,36 +1,43 @@
 const express = require("express");
-const readline = require("readline");
+const sqlite3 = require("sqlite3").verbose();
 const axios = require("axios");
+const readline = require("readline");
 const app = express();
+const db = new sqlite3.Database("./lojas.db");
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-let cep;
-
 app.listen(3000, () => {
   console.log("Servidor iniciado na porta 3000");
-  rl.question("Digite o CEP: ", (resposta) => {
-    cep = resposta;
-    console.log(`Pesquisando CEP ${cep}`);
-    rl.close();
-  });
 });
 
 app.get("/", async (req, res) => {
-  const url = `https://viacep.com.br/ws/${cep}/json/`;
   try {
-    res.send(
-      `<body style="background-color: black"><p style="color: white">Consultando CEP: ${cep}</p></body>`
-    );
-    const response = await axios.get(url);
-    const endereco = response.data;
-    console.log(cep);
-    console.log(endereco);
+    console.log("APP.GET");
+    rl.question("Digite o CEP: ", (resposta) => {
+      let url = `https://viacep.com.br/ws/${resposta}/json/`;
+      rl.close();
+      res.send(url);
+    });
   } catch (error) {
-    console.log(error.message);
+    console.log("Erro no bloco APP.GET");
+    // console.log(error.message);
     res.status(500).json({ message: "Erro ao buscar endereço" });
   }
 });
+
+axios
+  .get("http://localhost:3000/")
+  .then((response) => {
+    console.log("AXIOS");
+    axios.get(response.data).then((response) => {
+      console.log(response.data);
+    });
+  })
+  .catch((error) => {
+    console.log("Erro no bloco AXIOS");
+    // console.log(error.message);
+  });
