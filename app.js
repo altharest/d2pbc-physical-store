@@ -1,9 +1,9 @@
 const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3");
 const axios = require("axios");
 const readline = require("readline");
 const app = express();
-const db = new sqlite3.Database("./lojas.db");
+const db = new Database("./lojas.db");
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -12,13 +12,17 @@ const rl = readline.createInterface({
 
 app.listen(3000, () => {
   console.log("Servidor iniciado na porta 3000");
+  // console.log("DATABASE");
+  // const tabela = db.prepare("SELECT * FROM lojas").all();
+  // console.log(tabela);
+  // console.log(tabela.map((x, index) => tabela[index].cep));
 });
 
 app.get("/", async (req, res) => {
   try {
     console.log("APP.GET");
-    rl.question("Digite o CEP: ", (resposta) => {
-      let url = `https://viacep.com.br/ws/${resposta}/json/`;
+    rl.question("Digite o CEP (apenas números): ", (resposta) => {
+      let url = `https://brasilapi.com.br/api/cep/v2/${resposta}`;
       rl.close();
       res.send(url);
     });
