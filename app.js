@@ -1,7 +1,6 @@
 const express = require("express");
 const Database = require("better-sqlite3");
 const winston = require("winston");
-const readline = require("readline");
 const axios = require("axios");
 const { error } = require("console");
 const db = new Database("./lojas.db");
@@ -19,13 +18,8 @@ const logger = winston.createLogger({
   ],
 });
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
-let distLojas = [];
-let coordPush = [];
+const distLojas = [];
+const coordPush = [];
 const lojasDb = db.prepare("SELECT * FROM lojas").all();
 for (let loja of lojasDb) {
   axios
@@ -59,21 +53,20 @@ function calcDistancia(coord1, coord2) {
   return distancia;
 }
 
-app.get("/", async (req, res) => {
+app.get("/:cep", async (req, res) => {
   logger.info("Requisiçao GET /");
   try {
-    rl.question("** DIGITE O CEP (apenas números) ** ", (resposta) => {
-      const resTeste = /^\d{8}$/;
-      if (resTeste.test(resposta)) {
-        let url = `https://brasilapi.com.br/api/cep/v2/${resposta}`;
-        rl.close();
-        axios
-          .get(url)
-          .then((response) => {
-            const coordTerm = response.data.location.coordinates;
-            logger.info(coordTerm);
+    const resTeste = /^\d{8}$/;
+    if (resTeste.test(req.params.cep)) {
+      let url = `https://brasilapi.com.br/api/cep/v2/${req.params.cep}`;
+      rl.close();
+      axios
+        .get(url)
+        .then((response) => {
+          const coordTerm = response.data.location.coordinates;
+          logger.info("Coordenadas do CEP digitado: " + coordTerm);
+          if (Object.keys(coordTerm).length !== 0) {
             const coordLojas = coordPush.sort((a, b) => a.id - b.id);
-            logger.info(coordLojas);
             for (let coords of coordLojas) {
               let dist = calcDistancia(coordTerm, coords.coord);
               if (dist > 100) {
@@ -82,59 +75,56 @@ app.get("/", async (req, res) => {
                 distLojas.push({ id: coords.id, distancia: dist });
               }
             }
-          })
-          .then(() => {
-            logger.info(distLojas.sort((a, b) => a.id - b.id));
-            if (distLojas.length === 0) {
-              console.log("\n**  NENHUMA LOJA MAIS PRÓXIMA QUE 100 KM  **");
-              logger.info("Nenhuma loja mais próxima que 100 km");
-            } else {
-              console.log(
-                "\n**  LISTA DAS LOJAS MAIS PRÓXIMAS DENTRO DE 100 KM  **"
-              );
-              for (let loja of distLojas.sort(
-                (a, b) => a.distancia - b.distancia
-              )) {
-                if (loja.distancia <= 100) {
-                  console.log(
-                    `\n${
-                      lojasDb[loja.id - 1].nome
-                    } | Distância: ${loja.distancia.toFixed(2)} km`
-                  );
-                  console.log(lojasDb[`${loja.id - 1}`]);
-                  logger.info(lojasDb[`${loja.id - 1}`]);
-                }
+          } else {
+            logger.error("A API não possui as coordenadas para este CEP");
+            res.status(500).json({
+              message: "A API não possui as coordenadas para este CEP",
+            });
+          }
+        })
+        .then(() => {
+          logger.info(distLojas.sort((a, b) => a.id - b.id));
+          if (distLojas.length === 0) {
+            console.log("\n**  NENHUMA LOJA MAIS PRÓXIMA QUE 100 KM  **");
+            logger.info("Nenhuma loja mais próxima que 100 km");
+          } else {
+            console.log(
+              "\n**  LISTA DAS LOJAS MAIS PRÓXIMAS DENTRO DE 100 KM  **"
+            );
+            for (let loja of distLojas.sort(
+              (a, b) => a.distancia - b.distancia
+            )) {
+              if (loja.distancia <= 100) {
+                console.log(
+                  `\n${
+                    lojasDb[loja.id - 1].nome
+                  } | Distância: ${loja.distancia.toFixed(2)} km`
+                );
+                console.log(lojasDb[`${loja.id - 1}`]);
+                logger.info(lojasDb[`${loja.id - 1}`]);
               }
             }
-          })
-          .then(() => {
-            res
-              .status(200)
-              .send(distLojas.sort((a, b) => a.distancia - b.distancia));
-          });
-      } else {
-        logger.error("CEP inválido");
-        throw error;
-      }
-    });
+          }
+        })
+        .then(() => {
+          res
+            .status(200)
+            .send(distLojas.sort((a, b) => a.distancia - b.distancia));
+        });
+    } else {
+      logger.error(
+        "CEP inválido: O valor digitado deve ter 8 dígitos e conter apenas números"
+      );
+      res.status(500).json({
+        message:
+          "CEP inválido: O valor digitado deve ter 8 dígitos e conter apenas números",
+      });
+    }
   } catch (error) {
     logger.error("Erro:", error.message);
     res.status(500).json({ message: "Erro ao buscar endereço" });
   }
 });
-
-axios
-  .get("http://localhost:3000/")
-  .then((response) => {
-    logger.info(response.data);
-  })
-  .then(() => {
-    server.close(() => process.exit(0));
-  })
-  .catch((error) => {
-    logger.error("Erro:", error.message);
-    res.status(500).send("Erro interno");
-  });
 
 const server = app.listen(3000, () => {
   logger.info("Servidor iniciado na porta 3000");
