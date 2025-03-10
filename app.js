@@ -1,9 +1,23 @@
 const express = require("express");
 const Database = require("better-sqlite3");
-const axios = require("axios");
+const winston = require("winston");
 const readline = require("readline");
-const app = express();
+const axios = require("axios");
+const { error } = require("console");
 const db = new Database("./lojas.db");
+const app = express();
+
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
+    new winston.transports.File({ filename: "logs/combined.log" }),
+  ],
+});
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -46,29 +60,65 @@ function calcDistancia(coord1, coord2) {
 }
 
 app.get("/", async (req, res) => {
+  logger.info("Requisiçao GET /");
   try {
-    console.log("APP.GET");
     rl.question("** DIGITE O CEP (apenas números) ** ", (resposta) => {
-      let url = `https://brasilapi.com.br/api/cep/v2/${resposta}`;
-      rl.close();
-      axios
-        .get(url)
-        .then((response) => {
-          const coordTerm = response.data.location.coordinates;
-          const coordLojas = coordPush.sort((a, b) => a.id - b.id);
-          for (let coords of coordLojas) {
-            let dist = calcDistancia(coordTerm, coords.coord);
-            distLojas.push({ id: coords.id, distancia: dist });
-          }
-        })
-        .then(() => {
-          res
-            .status(200)
-            .send(distLojas.sort((a, b) => a.distancia - b.distancia));
-        });
+      const resTeste = /^\d{8}$/;
+      if (resTeste.test(resposta)) {
+        let url = `https://brasilapi.com.br/api/cep/v2/${resposta}`;
+        rl.close();
+        axios
+          .get(url)
+          .then((response) => {
+            const coordTerm = response.data.location.coordinates;
+            logger.info(coordTerm);
+            const coordLojas = coordPush.sort((a, b) => a.id - b.id);
+            logger.info(coordLojas);
+            for (let coords of coordLojas) {
+              let dist = calcDistancia(coordTerm, coords.coord);
+              if (dist > 100) {
+                logger.info(`Loja ID: ${coords.id} mais distante que 100 km`);
+              } else {
+                distLojas.push({ id: coords.id, distancia: dist });
+              }
+            }
+          })
+          .then(() => {
+            logger.info(distLojas.sort((a, b) => a.id - b.id));
+            if (distLojas.length === 0) {
+              console.log("\n**  NENHUMA LOJA MAIS PRÓXIMA QUE 100 KM  **");
+              logger.info("Nenhuma loja mais próxima que 100 km");
+            } else {
+              console.log(
+                "\n**  LISTA DAS LOJAS MAIS PRÓXIMAS DENTRO DE 100 KM  **"
+              );
+              for (let loja of distLojas.sort(
+                (a, b) => a.distancia - b.distancia
+              )) {
+                if (loja.distancia <= 100) {
+                  console.log(
+                    `\n${
+                      lojasDb[loja.id - 1].nome
+                    } | Distância: ${loja.distancia.toFixed(2)} km`
+                  );
+                  console.log(lojasDb[`${loja.id - 1}`]);
+                  logger.info(lojasDb[`${loja.id - 1}`]);
+                }
+              }
+            }
+          })
+          .then(() => {
+            res
+              .status(200)
+              .send(distLojas.sort((a, b) => a.distancia - b.distancia));
+          });
+      } else {
+        logger.error("CEP inválido");
+        throw error;
+      }
     });
   } catch (error) {
-    console.log(error.message);
+    logger.error("Erro:", error.message);
     res.status(500).json({ message: "Erro ao buscar endereço" });
   }
 });
@@ -76,25 +126,16 @@ app.get("/", async (req, res) => {
 axios
   .get("http://localhost:3000/")
   .then((response) => {
-    console.log("**  LISTA DAS LOJAS MAIS PRÓXIMAS DENTRO DE 100 KM  **");
-    for (let loja of response.data) {
-      if (loja.distancia <= 100) {
-        console.log("*");
-        console.log(
-          `${lojasDb[loja.id - 1].nome} | Distância: ${loja.distancia.toFixed(
-            2
-          )} km`
-        );
-        console.log(lojasDb[`${loja.id - 1}`]);
-        console.log("*");
-      }
-    }
+    logger.info(response.data);
+  })
+  .then(() => {
     server.close(() => process.exit(0));
   })
   .catch((error) => {
-    console.log(error.message);
+    logger.error("Erro:", error.message);
+    res.status(500).send("Erro interno");
   });
 
 const server = app.listen(3000, () => {
-  console.log("Servidor iniciado na porta 3000");
+  logger.info("Servidor iniciado na porta 3000");
 });
