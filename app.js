@@ -2,7 +2,6 @@ const express = require("express");
 const Database = require("better-sqlite3");
 const winston = require("winston");
 const axios = require("axios");
-const { error } = require("console");
 const db = new Database("./lojas.db");
 const app = express();
 
@@ -59,7 +58,6 @@ app.get("/:cep", async (req, res) => {
     const resTeste = /^\d{8}$/;
     if (resTeste.test(req.params.cep)) {
       let url = `https://brasilapi.com.br/api/cep/v2/${req.params.cep}`;
-      rl.close();
       axios
         .get(url)
         .then((response) => {
